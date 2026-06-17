@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+
+# Runtime credentials and generated account data
+accounts/
+runs/
+output/
+outputs/
+codex_auth/
+auth/
+auth.json
+*.auth.json
+*auth*.json
+
+# Batch inputs and generated reports may contain emails/passwords/tokens.
+*.csv
+*.tsv
+*.log
+*.ndjson
+
+# Keep sanitized examples if needed.
+!examples/**/*.csv
+!examples/**/*.tsv
+!examples/**/*.json
+!*.example.csv
+!*.example.json
+
+# Browser/runtime artifacts
+.playwright/
+playwright-report/
+test-results/
+downloads/
+screenshots/
+
+# macOS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
