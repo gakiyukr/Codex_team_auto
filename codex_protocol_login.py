@@ -324,8 +324,18 @@ from sentinel import get_sentinel_token
 class CodexLogin:
     """精简版协议登录，只处理已有账号密码登录 + Codex OAuth 换 token"""
 
-    def __init__(self, proxy: Optional[str] = None):
+    def __init__(self, proxy: Optional[str] = None, oidc_sso_url: str = "", oidc_sso_admin_token: str = "", oidc_sso_invite_code: str = ""):
         self.proxy = proxy
+        self._oidc_sso_url = (oidc_sso_url or "").rstrip("/")
+        self._oidc_sso_admin_token = oidc_sso_admin_token or ""
+        self._oidc_sso_invite_code = oidc_sso_invite_code or ""
+        self._oidc_sso_domain = ""
+        if self._oidc_sso_url:
+            try:
+                self._oidc_sso_domain = urlparse(self._oidc_sso_url).netloc.lower()
+            except Exception:
+                pass
+        self._pkce_verifier = ""
         self._impersonate_candidates = ["chrome133a", "safari18_0", "chrome136", "chrome131"]
         self._impersonate_idx = 0
         self.session = create_session(proxy=proxy, impersonate=self._impersonate_candidates[0])
@@ -678,6 +688,92 @@ class CodexLogin:
         logger.warning("Codex workspace/select 未返回 continue_url")
         return ""
 
+    def _is_oidc_sso_authorize(self, url: str) -> bool:
+        """檢查 URL 是否是 OIDC SSO 的 authorize 端點"""
+        if not url or not self._oidc_sso_url:
+            return False
+        try:
+            parsed = urlparse(url)
+            sso_parsed = urlparse(self._oidc_sso_url)
+            return (
+                parsed.netloc == sso_parsed.netloc
+                and parsed.path == "/authorize"
+                and "client_id" in parsed.query
+            )
+        except Exception:
+            return False
+
+    def _handle_oidc_sso_login(self, authorize_url: str, email: str) -> str:
+        """處理 OIDC SSO 登入/註冊"""
+        logger.info("[OIDC SSO] 檢測到 OIDC SSO 授權頁面")
+        if not self._oidc_sso_admin_token:
+            logger.warning("[OIDC SSO] 未設定 ADMIN_TOKEN，無法自動登入")
+            return ""
+
+        try:
+            parsed = urlparse(authorize_url)
+            params = parse_qs(parsed.query)
+            client_id = params.get("client_id", [""])[0]
+            redirect_uri = params.get("redirect_uri", [""])[0]
+            scope = params.get("scope", ["openid email"])[0]
+            state = params.get("state", [""])[0]
+            nonce = params.get("nonce", [""])[0]
+            code_challenge = params.get("code_challenge", [""])[0]
+            code_challenge_method = params.get("code_challenge_method", [""])[0]
+
+            account = email.split("@")[0] if "@" in email else email
+
+            if self._oidc_sso_invite_code:
+                api_url = f"{self._oidc_sso_url}/api/register"
+                payload = {
+                    "account": account,
+                    "invite_code": self._oidc_sso_invite_code,
+                    "client_id": client_id,
+                    "redirect_uri": redirect_uri,
+                    "scope": scope,
+                    "state": state,
+                    "nonce": nonce,
+                    "code_challenge": code_challenge,
+                    "code_challenge_method": code_challenge_method,
+                }
+                logger.info(f"[OIDC SSO] 走 /api/register 註冊子號: {account}")
+            else:
+                api_url = f"{self._oidc_sso_url}/api/login"
+                payload = {
+                    "account": account,
+                    "client_id": client_id,
+                    "redirect_uri": redirect_uri,
+                    "scope": scope,
+                    "state": state,
+                    "nonce": nonce,
+                    "code_challenge": code_challenge,
+                    "code_challenge_method": code_challenge_method,
+                }
+                logger.info(f"[OIDC SSO] 走 /api/login 登入母號: {account}")
+
+            headers = {
+                "Authorization": f"Bearer {self._oidc_sso_admin_token}",
+                "Content-Type": "application/json",
+            }
+
+            resp = self.session.post(api_url, json=payload, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                logger.warning(f"[OIDC SSO] {api_url} 失敗: {resp.status_code} - {resp.text[:200]}")
+                return ""
+
+            data = resp.json()
+            callback_url = data.get("redirect_uri", "")
+            if not callback_url:
+                logger.warning("[OIDC SSO] 響應中缺少 redirect_uri")
+                return ""
+
+            logger.info(f"[OIDC SSO] 成功取得 callback URL: {callback_url[:100]}...")
+            return callback_url
+
+        except Exception as e:
+            logger.warning(f"[OIDC SSO] 處理 OIDC SSO 時發生錯誤: {e}")
+            return ""
+
     def follow_redirect_chain(
         self,
         start_url: str,
@@ -707,6 +803,14 @@ class CodexLogin:
             try:
                 resp = self.session.get(current_url, headers=headers, timeout=30, allow_redirects=False)
             except Exception:
+                break
+
+            # 检测 OIDC SSO 重定向（自定义 OIDC Provider）
+            if resp.status_code == 200 and self._is_oidc_sso_authorize(resp.url or ""):
+                oidc_result = self._handle_oidc_sso_login(resp.url, email)
+                if oidc_result:
+                    current_url = oidc_result
+                    continue
                 break
 
             # 检测 SAML SSO 重定向（Keycloak）
@@ -744,6 +848,14 @@ class CodexLogin:
                     break
                 if location.startswith("/"):
                     location = urljoin(current_url, location)
+
+                # 检测 OIDC SSO 重定向（自定义 OIDC Provider）
+                if self._is_oidc_sso_authorize(location):
+                    oidc_result = self._handle_oidc_sso_login(location, email)
+                    if oidc_result:
+                        current_url = oidc_result
+                        continue
+                    break
 
                 # 检测 SAML SSO 重定向（Keycloak）
                 if "SAMLRequest" in location or "/protocol/saml" in location:
@@ -882,6 +994,7 @@ class CodexLogin:
         logger.info("[9/9] Codex OAuth 换 refresh_token...")
         state = b64url_no_pad(secrets.token_bytes(24))
         verifier, challenge = build_pkce_pair()
+        self._pkce_verifier = verifier
         auth_params = {
             "client_id": CODEX_CLIENT_ID,
             "response_type": "code",
@@ -1016,6 +1129,7 @@ class CodexLogin:
         logger.info("[0/8] 直接 Codex OAuth 登录...")
         state = b64url_no_pad(secrets.token_bytes(24))
         verifier, challenge = build_pkce_pair()
+        self._pkce_verifier = verifier
         auth_params = {
             "client_id": CODEX_CLIENT_ID,
             "response_type": "code",
@@ -1172,9 +1286,16 @@ def atomic_write_json(out_path: Path, data: Any) -> None:
             tmp_path.unlink()
 
 
-def login_and_save(email: str, password: str, out_path: Path, proxy: str = None) -> bool:
+def login_and_save(
+    email: str,
+    password: str,
+    out_path: Path,
+    proxy: str = None,
+    oidc_sso_url: str = "",
+    oidc_sso_admin_token: str = "",
+) -> bool:
     try:
-        client = CodexLogin(proxy=proxy)
+        client = CodexLogin(proxy=proxy, oidc_sso_url=oidc_sso_url, oidc_sso_admin_token=oidc_sso_admin_token)
         auth_data, logged_email = client.login(email, password)
         atomic_write_json(out_path, auth_data)
         tokens = auth_data["tokens"]
@@ -1198,6 +1319,9 @@ def login_batch_job(
     proxy: str = None,
     retries: int = 0,
     skip_existing: bool = False,
+    oidc_sso_url: str = "",
+    oidc_sso_admin_token: str = "",
+    oidc_sso_invite_code: str = "",
 ) -> dict:
     if skip_existing and out_path.exists():
         logger.info(f"[{index}/{total}] 跳过已存在: {email} -> {out_path}")
@@ -1206,7 +1330,7 @@ def login_batch_job(
     attempts = retries + 1
     for attempt in range(1, attempts + 1):
         logger.info(f"[{index}/{total}] {email} (尝试 {attempt}/{attempts})")
-        if login_and_save(email, password, out_path, proxy):
+        if login_and_save(email, password, out_path, proxy, oidc_sso_url, oidc_sso_admin_token):
             return {"email": email, "out_path": str(out_path), "status": "success", "success": True}
         if attempt < attempts:
             time.sleep(min(5, attempt * 2))
@@ -1219,6 +1343,7 @@ def main() -> int:
     parser.add_argument("--email", help="登录邮箱")
     parser.add_argument("--password", help="登录密码")
     parser.add_argument("--csv", help="CSV 文件（email,password）")
+    parser.add_argument("--json", help="JSON 文件（帳號列表）")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--out", help="单账号输出路径")
     group.add_argument("--out-dir", help="批量输出目录")
@@ -1226,6 +1351,9 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=1, help="CSV 批量登录并发数 [默认: 1]")
     parser.add_argument("--retries", type=int, default=2, help="CSV 批量登录失败重试次数 [默认: 2]")
     parser.add_argument("--skip-existing", action="store_true", help="CSV 批量登录时跳过已存在的输出 JSON")
+    parser.add_argument("--oidc-sso-url", help="自定义 OIDC SSO 服务器 URL（例如 https://sso.example.com）")
+    parser.add_argument("--oidc-sso-admin-token", help="OIDC SSO 服务器的 ADMIN_TOKEN")
+    parser.add_argument("--oidc-sso-invite-code", help="OIDC SSO 邀请码（用于 /api/register）")
     args = parser.parse_args()
 
     if args.concurrency <= 0:
@@ -1243,31 +1371,69 @@ def main() -> int:
 
     if args.email and args.password:
         out_path = Path(args.out) if args.out else Path(args.out_dir) / f"{safe_account_filename(args.email)}.json"
-        ok = login_and_save(args.email, args.password, out_path, args.proxy)
+        ok = login_and_save(
+            args.email, args.password, out_path, args.proxy,
+            getattr(args, "oidc_sso_url", "") or "",
+            getattr(args, "oidc_sso_admin_token", "") or "",
+            getattr(args, "oidc_sso_invite_code", "") or "",
+        )
         return 0 if ok else 1
 
-    if not args.csv:
-        print("[!] 需要 --email/--password 或 --csv")
+    if not args.csv and not args.json:
+        print("[!] 需要 --email/--password、--csv 或 --json")
         return 1
     if not args.out_dir:
-        print("[!] CSV 批量模式需要 --out-dir")
-        return 1
-
-    csv_path = Path(args.csv)
-    if not csv_path.exists():
-        print(f"[!] CSV 不存在: {csv_path}")
+        print("[!] 批量模式需要 --out-dir")
         return 1
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     accounts = []
-    with open(csv_path, encoding="utf-8") as f:
-        for row in csv.reader(f):
-            if len(row) >= 2 and row[0].strip() and not row[0].startswith("#"):
-                accounts.append((row[0].strip(), row[1].strip()))
+
+    if args.csv:
+        csv_path = Path(args.csv)
+        if not csv_path.exists():
+            print(f"[!] CSV 不存在: {csv_path}")
+            return 1
+        with open(csv_path, encoding="utf-8") as f:
+            for row in csv.reader(f):
+                if len(row) >= 2 and row[0].strip() and not row[0].startswith("#"):
+                    accounts.append((row[0].strip(), row[1].strip()))
+
+    if args.json:
+        json_path = Path(args.json)
+        if not json_path.exists():
+            print(f"[!] JSON 不存在: {json_path}")
+            return 1
+        with open(json_path, encoding="utf-8") as f:
+            content = f.read().strip()
+            # 嘗試解析為 JSON
+            try:
+                json_data = json.loads(content)
+                if isinstance(json_data, list):
+                    for item in json_data:
+                        if isinstance(item, dict):
+                            email = item.get("email", "").strip()
+                            password = item.get("password", "").strip()
+                            if email:
+                                accounts.append((email, password))
+                        elif isinstance(item, str):
+                            # 如果是字符串，當作郵箱，密碼為空
+                            accounts.append((item.strip(), ""))
+            except json.JSONDecodeError:
+                # 如果不是 JSON，當作純文字處理（每行一個郵箱）
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        # 支援 CSV 格式：email,password
+                        if "," in line:
+                            parts = line.split(",", 1)
+                            accounts.append((parts[0].strip(), parts[1].strip()))
+                        else:
+                            accounts.append((line, ""))
 
     if not accounts:
-        print("[!] CSV 无有效账号")
+        print("[!] 無有效帳號")
         return 1
 
     jobs = []
@@ -1311,6 +1477,9 @@ def main() -> int:
                 args.proxy,
                 args.retries,
                 args.skip_existing,
+                args.oidc_sso_url,
+                args.oidc_sso_admin_token,
+                args.oidc_sso_invite_code,
             ): email
             for i, (email, password, out_path) in enumerate(jobs, 1)
         }
