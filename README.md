@@ -1,34 +1,63 @@
-# Codex Invite Pipeline
+# Codex Referral Risk Research
 
-Utilities for a staged Codex SSO invite pipeline:
+This repository contains research tooling for studying SSO-based workspace referral flows, invite quota behavior, token lifecycle handling, and activation telemetry patterns in a controlled anti-fraud research setting.
 
-1. Log in seed accounts and save Codex `auth.json` files.
-2. Use seed auth files to send workspace referral invites.
-3. Log in invited accounts and save their `auth.json` files.
-4. Run protocol activation for invited accounts.
+The project is intended to help security and risk teams reproduce referral-flow edge cases, measure concurrency behavior, and evaluate where abuse-resistant controls should be enforced.
 
-## Files
+## Research Focus
 
-- `codex_protocol_login.py` - direct Codex OAuth + SSO login, supports CSV batch mode.
-- `codex_invitation_helper.py` - single-account invite and invite quota probing.
-- `codex_invitation_batch.py` - concurrent seed-account invitation.
-- `codex_activation_helper.py` - single-account protocol activation.
-- `codex_activation_batch.py` - concurrent invited-account activation.
-- `sentinel.py`, `sentinel_quickjs.py`, `openai_sentinel_quickjs.js` - Sentinel token helpers.
-- `codex_sso_login.py` - browser-based fallback login helper.
+- SSO account creation paths in OAuth-based product onboarding.
+- Workspace referral quota enforcement under concurrent invitation attempts.
+- Differences between user-level and workspace-level referral limits.
+- Token refresh and account activation behavior after referral acceptance.
+- Batch-flow observability for fraud-risk analysis and control validation.
 
-## Local-Only Data
+## Repository Contents
 
-Do not commit runtime data. The following are intentionally ignored:
+- `codex_protocol_login.py`  
+  Direct Codex OAuth + SSO login flow. Supports single-account and CSV batch modes.
+
+- `codex_invitation_helper.py`  
+  Single-account referral quota probing and invite request helper.
+
+- `codex_invitation_batch.py`  
+  Concurrent seed-account invitation runner for quota and race-condition research.
+
+- `codex_activation_helper.py`  
+  Single-account protocol activation simulator.
+
+- `codex_activation_batch.py`  
+  Concurrent activation runner for invited-account research.
+
+- `sentinel.py`, `sentinel_quickjs.py`, `openai_sentinel_quickjs.js`  
+  Sentinel token generation helpers used by the login flow.
+
+- `codex_sso_login.py`  
+  Browser-based fallback login helper.
+
+## Data Safety
+
+Runtime data is intentionally excluded from git. Do not commit:
+
+- account auth files
+- access tokens
+- refresh tokens
+- id tokens
+- account IDs
+- real email/password CSV files
+- invite result exports
+- local logs
+
+The `.gitignore` blocks common runtime directories and sensitive file patterns such as:
 
 - `accounts/`
 - `runs/`
 - `*.csv`
 - `*auth*.json`
 - `.venv/`
-- logs and Python caches
+- `*.log`
 
-These files can contain emails, passwords, access tokens, refresh tokens, and account IDs.
+Only sanitized examples should be committed under `examples/`.
 
 ## Setup
 
@@ -37,9 +66,9 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-## Pipeline
+## Example Research Workflow
 
-Create a CSV from the example format:
+Create a local CSV in the format shown by `examples/accounts.example.csv`:
 
 ```text
 user1@example.com,YourPassword
@@ -58,7 +87,7 @@ Log in seed accounts:
   --skip-existing
 ```
 
-Invite from seed accounts:
+Probe and send referral invites from seed accounts:
 
 ```bash
 .venv/bin/python codex_invitation_batch.py \
@@ -71,7 +100,7 @@ Invite from seed accounts:
   --out runs/example/invite_results.json
 ```
 
-Build invited-account CSV from successful invites:
+Extract only successfully invited emails:
 
 ```bash
 jq -r '.[].invites[]?.email | . + ",YourPassword"' \
@@ -90,7 +119,7 @@ Log in invited accounts:
   --skip-existing
 ```
 
-Activate invited accounts:
+Run activation telemetry simulation:
 
 ```bash
 .venv/bin/python codex_activation_batch.py \
@@ -99,3 +128,15 @@ Activate invited accounts:
   --proxy http://127.0.0.1:7897 \
   --save-back
 ```
+
+## Notes for Researchers
+
+- Treat all generated auth files and CSVs as sensitive.
+- Use isolated research tenants and domains.
+- Validate results from server responses, not only from locally generated inputs.
+- For invite analysis, count only `invites[].email` entries returned by the service.
+- Keep raw artifacts under ignored runtime directories such as `runs/`.
+
+## License
+
+No license is currently specified. Add one before redistributing or accepting external contributions.
