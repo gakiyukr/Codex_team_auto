@@ -216,7 +216,7 @@ def main() -> int:
     parser.add_argument("--prefix-len", type=int, default=20, help="随机邮箱前缀长度 [默认: 20]")
     
     # 代理与输出
-    parser.add_argument("--proxy", help="HTTP 住宅或本地代理 URL")
+    parser.add_argument("--proxy", default="http://127.0.0.1:7890", help="HTTP 住宅或本地代理 URL [默認: http://127.0.0.1:7890]")
     parser.add_argument("--out", help="成功发送后，将已发送的邮箱列表保存至该 JSON 文件路径")
     parser.add_argument("--dry-run", action="store_true", help="只做预检，输出准备邀请的邮箱，不发送实际邀请")
     parser.add_argument("--save-back", action="store_true", help="刷新 token 或补齐 account_id 后写回原文件")

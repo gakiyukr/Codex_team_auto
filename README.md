@@ -9,7 +9,7 @@
 - **並發處理**：母號登入、邀請發送、子號登入均支援多執行緒並發
 - **多種輸入格式**：支援 CSV、JSON（物件陣列）、純文字（每行一個郵箱）
 - **自動備份**：邀請結果自動備份，避免覆蓋歷史記錄
-- **代理支援**：所有 HTTP 請求均支援代理（預設 `http://127.0.0.1:7890`）
+- **代理支援**：所有腳本的所有 HTTP 請求均走代理，且**每支腳本都預設 `http://127.0.0.1:7890`**（不傳 `--proxy` 也會走代理；用 `--proxy ""` 可停用）
 
 ## 環境需求
 
@@ -146,7 +146,7 @@ python codex_referral_flow.py --auto-seeds 10 --seeds-invite-code JOIN-2026 --do
 | `--concurrency N` | 並發數，預設 `1` |
 | `--retries N` | 失敗重試次數，預設 `2` |
 | `--skip-existing` | 跳過已存在的帳號 |
-| `--proxy URL` | 代理 URL |
+| `--proxy URL` | 代理 URL，預設 `http://127.0.0.1:7890` |
 | `--oidc-sso-url` | SSO 伺服器 URL |
 | `--oidc-sso-admin-token` | SSO ADMIN_TOKEN |
 | `--oidc-sso-invite-code` | SSO 邀請碼（有則走 `/api/register`，無則走 `/api/login`） |
@@ -159,7 +159,7 @@ python codex_referral_flow.py --auto-seeds 10 --seeds-invite-code JOIN-2026 --do
 | `--domain` | 隨機郵箱域名，預設 `dfhdg.store` |
 | `--per-account` | 每個母號邀請數量，預設 `5` |
 | `--concurrency` | 並發母號數，預設 `5` |
-| `--proxy` | 代理 URL |
+| `--proxy` | 代理 URL，預設 `http://127.0.0.1:7890` |
 | `--out` | 結果輸出 JSON 路徑 |
 | `--dry-run` | 只預檢不發送 |
 | `--save-back` | 刷新 token 後寫回原文件 |
@@ -170,7 +170,7 @@ python codex_referral_flow.py --auto-seeds 10 --seeds-invite-code JOIN-2026 --do
 |------|------|
 | `--auth-dir` | 子號憑證目錄 |
 | `--concurrency` | 並發數，預設 `5` |
-| `--proxy` | 代理 URL |
+| `--proxy` | 代理 URL，預設 `http://127.0.0.1:7890` |
 | `--save-back` | 刷新 token 後寫回原文件 |
 
 ## 使用情境
@@ -372,7 +372,7 @@ runs/auto/
 
 ### Q: 代理一定要設定嗎？
 
-預設使用 `http://127.0.0.1:7890`。如果你的代理位址不同，用 `--proxy` 指定。如果不需要代理，用 `--proxy ""` 停用。
+所有腳本都預設走 `http://127.0.0.1:7890`（無驗證），不傳 `--proxy` 也會走代理，所以執行前請確認本機代理已開啟，否則所有網絡請求都會失敗。如果你的代理位址不同，用 `--proxy` 指定；如果不需要代理，用 `--proxy ""` 停用。
 
 ### Q: SSO 系統需要怎麼配置？
 

@@ -95,7 +95,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Codex 批量并行激活调度器")
     parser.add_argument("--auth-dir", required=True, help="子号凭证目录")
     parser.add_argument("--concurrency", type=int, default=5, help="并发数 [默认: 5]")
-    parser.add_argument("--proxy", help="HTTP 代理 URL")
+    parser.add_argument("--proxy", default="http://127.0.0.1:7890", help="HTTP 代理 URL [默認: http://127.0.0.1:7890]")
     parser.add_argument("--save-back", action="store_true", help="刷新 token 后写回原文件")
     args = parser.parse_args()
 

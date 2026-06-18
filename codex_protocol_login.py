@@ -1353,7 +1353,7 @@ def main() -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--out", help="单账号输出路径")
     group.add_argument("--out-dir", help="批量输出目录")
-    parser.add_argument("--proxy", help="代理 URL")
+    parser.add_argument("--proxy", default="http://127.0.0.1:7890", help="代理 URL [默認: http://127.0.0.1:7890]")
     parser.add_argument("--concurrency", type=int, default=1, help="CSV 批量登录并发数 [默认: 1]")
     parser.add_argument("--retries", type=int, default=2, help="CSV 批量登录失败重试次数 [默认: 2]")
     parser.add_argument("--skip-existing", action="store_true", help="CSV 批量登录时跳过已存在的输出 JSON")

@@ -387,7 +387,7 @@ def main() -> int:
     group.add_argument("--out-dir", help="批量输出目录")
 
     # 选项
-    parser.add_argument("--proxy", help="代理 URL")
+    parser.add_argument("--proxy", default="http://127.0.0.1:7890", help="代理 URL [默認: http://127.0.0.1:7890]")
     parser.add_argument("--otp-cmd", help="OTP 获取命令（{email} 会被替换为邮箱）")
     parser.add_argument("--headless", action="store_true", help="无头模式（不显示浏览器）")
     parser.add_argument("--timeout", type=int, default=300, help="登录超时秒数 [默认: 300]")

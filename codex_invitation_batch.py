@@ -135,7 +135,7 @@ def main() -> int:
     parser.add_argument("--domain", default="dfhdg.store", help="随机邮箱域名 [默认: dfhdg.store]")
     parser.add_argument("--per-account", type=int, default=5, help="每个母号邀请邮箱数 [默认: 5]")
     parser.add_argument("--concurrency", type=int, default=5, help="并发母号数 [默认: 5]")
-    parser.add_argument("--proxy", help="HTTP 代理 URL")
+    parser.add_argument("--proxy", default="http://127.0.0.1:7890", help="HTTP 代理 URL [默認: http://127.0.0.1:7890]")
     parser.add_argument("--out", help="结果输出 JSON 文件路径")
     parser.add_argument("--dry-run", action="store_true", help="只预检，不实际发送")
     parser.add_argument("--save-back", action="store_true", help="刷新 token 或补齐 account_id 后写回原文件")

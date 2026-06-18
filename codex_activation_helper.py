@@ -356,7 +356,7 @@ def main() -> int:
         default="protocol",
         help="激活模式。protocol: 纯 API 模拟(推荐，支持代理)；local-app: 拉起本地客户端 (默认: protocol)"
     )
-    parser.add_argument("--proxy", help="用于协议模拟的代理地址 (例如: http://127.0.0.1:7890)")
+    parser.add_argument("--proxy", default="http://127.0.0.1:7890", help="用于协议模拟的代理地址 [默認: http://127.0.0.1:7890]")
     parser.add_argument("--save-back", action="store_true", help="若刷新了 Access Token，是否写回原 JSON 文件")
     
     args = parser.parse_args()
